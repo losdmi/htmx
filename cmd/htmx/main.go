@@ -5,11 +5,24 @@ import (
 	"html/template"
 	"log"
 	"net/http"
+	"strconv"
 )
 
 type Contact struct {
+	ID    int
 	Name  string
 	Email string
+}
+
+var id = 0
+
+func newContact(name string, email string) Contact {
+	id++
+	return Contact{
+		ID:    id,
+		Name:  name,
+		Email: email,
+	}
 }
 
 type Contacts = []Contact
@@ -27,12 +40,22 @@ func (d *Data) hasEmail(email string) bool {
 	return false
 }
 
+func (d *Data) indexOf(id int) int {
+	for i, c := range d.Contacts {
+		if c.ID == id {
+			return i
+		}
+	}
+
+	return -1
+}
+
 func newData() Data {
 	return Data{
 		Contacts: []Contact{
-			{Name: "first", Email: "first@"},
-			{Name: "second", Email: "second@"},
-			{Name: "third", Email: "third@"},
+			newContact("first", "first@"),
+			newContact("second", "second@"),
+			newContact("third", "third@"),
 		},
 	}
 }
@@ -89,7 +112,7 @@ func main() {
 			return
 		}
 
-		contact := Contact{name, email}
+		contact := newContact(name, email)
 		page.Data.Contacts = append(page.Data.Contacts, contact)
 
 		if err := templates.ExecuteTemplate(w, "form", newFormData()); err != nil {
@@ -98,6 +121,22 @@ func main() {
 		if err := templates.ExecuteTemplate(w, "oob-contact", contact); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
+	})
+	router.HandleFunc("DELETE /contacts/{id}", func(w http.ResponseWriter, r *http.Request) {
+		idStr := r.PathValue("id")
+		id, err := strconv.Atoi(idStr)
+		if err != nil {
+			http.Error(w, "invalid id", http.StatusBadRequest)
+		}
+
+		index := page.Data.indexOf(id)
+		if index == -1 {
+			http.Error(w, "contact not found", http.StatusNotFound)
+		}
+
+		page.Data.Contacts = append(page.Data.Contacts[:index], page.Data.Contacts[index+1:]...)
+
+		w.WriteHeader(http.StatusOK)
 	})
 
 	server := http.Server{
